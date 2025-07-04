@@ -11,6 +11,7 @@ require (
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/cyphar/filepath-securejoin v0.4.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
+	github.com/go-chi/chi/v5 v5.2.2 // indirect
 	github.com/go-git/gcfg/v2 v2.0.2 // indirect
 	github.com/go-git/go-billy/v6 v6.0.0-20250627091229-31e2a16eef30 // indirect
 	github.com/go-git/go-git v4.7.0+incompatible // indirect
