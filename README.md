@@ -14,3 +14,10 @@ interla/ tightly coupled to app not designed ot be imported by anyone just for m
 
 
 pkg/ reusable utility code 
+
+
+have a map 
+
+
+map liftername : string 
+    =>
