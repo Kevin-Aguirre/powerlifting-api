@@ -4,14 +4,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"github.com/Kevin-Aguirre/powerlifting-api/data"
 )
 
-func GetRoot(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("got / request")
-	io.WriteString(w, "This is my website!\n")
-}
-
-func GetHello(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("got /hello request")
-	io.WriteString(w, "Hello, HTTP!\n")
+func GetHello(db *data.Database) http.HandlerFunc {
+	return func (w http.ResponseWriter, r *http.Request) {
+		fmt.Println("got /hello request")
+		io.WriteString(w, "Hello, HTTP!\n")
+	}
 }
