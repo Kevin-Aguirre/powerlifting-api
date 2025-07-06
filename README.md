@@ -21,3 +21,11 @@ have a map
 
 map liftername : string 
     =>
+
+
+min and max resp
+
+8
+/home/kevin/dev/Projects/powerlifting-api/opl-data/meet-data/mags/plusa/1991-06-22-C/entries.csv
+30
+/home/kevin/dev/Projects/powerlifting-api/opl-data/meet-data/auspl/2429/entries.csv

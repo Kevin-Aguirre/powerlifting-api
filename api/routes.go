@@ -8,7 +8,6 @@ import (
 )
 
 func NewRouter(db *data.Database) http.Handler {
-
 	r := chi.NewRouter()
 	r.Get("/lifters", handlers.GetHello(db))
 	r.Get("/meets", handlers.GetHello(db))
