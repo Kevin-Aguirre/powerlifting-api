@@ -1,15 +1,58 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
+	"sort"
+
 	"github.com/Kevin-Aguirre/powerlifting-api/data"
+	"github.com/go-chi/chi/v5"
 )
 
-func GetHello(db *data.Database) http.HandlerFunc {
+func GetLifters(db *data.Database) http.HandlerFunc {
 	return func (w http.ResponseWriter, r *http.Request) {
-		fmt.Println("got /hello request")
-		io.WriteString(w, "Hello, HTTP!\n")
+		fmt.Println("GET /lifters")
+		
+		// Collect Names 
+		names := make([]string, 0, len(db.LifterHistory))
+		for name := range db.LifterHistory {
+			names = append(names, name)
+		}
+ 
+		sort.Strings(names)
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(names); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return 
+		}
+	}
+}
+
+func GetLifter(db *data.Database) http.HandlerFunc {
+	return func (w http.ResponseWriter, r *http.Request) {
+		lifterNameEncoded := chi.URLParam(r, "lifterName")
+		lifterName, err := url.QueryUnescape(lifterNameEncoded)
+
+		if err != nil {
+			http.Error(w, "invalid lifter name", http.StatusBadRequest)
+			return 
+		}
+
+		lifter, exists := db.LifterHistory[lifterName]
+
+		if !exists {
+			http.Error(w, "lifter not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if err := json.NewEncoder(w).Encode(lifter); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return 
+		}
 	}
 }
