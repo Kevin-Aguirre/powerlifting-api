@@ -2,7 +2,7 @@
 # RESTful Go API for OpenPowerlifting Data 
 A RESTful API for open-source powerlifting data.
 
-## Todo 
+## TODO
 * Include API Documentation guide in this readme or another document linked here 
 * Add Filtering and Sorting Fields in Requests (especially for all lifters endpoint)
 * Expand database to include meet data (not just lifter data)
@@ -10,6 +10,8 @@ A RESTful API for open-source powerlifting data.
 * Inlucde Lifter Instagrams 
 * Include Lifter Personal Records 
 
+## Contributing
+If there's a feature missing from this API you'd like to see (that isn't in the TODO list above), feel free to make a pull request, issue, or reach out in any way :) 
 
 ## Depencies 
 Built with Go version 1.24.4
