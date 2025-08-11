@@ -9,6 +9,8 @@ import (
 
 func NewRouter(db *data.Database) http.Handler {
 	r := chi.NewRouter()
+
+	// Get Request
 	r.Get("/lifters", handlers.GetLifters(db))
 	r.Get("/lifters/{lifterName}", handlers.GetLifter(db))
 

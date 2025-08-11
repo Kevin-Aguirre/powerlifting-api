@@ -43,7 +43,7 @@ type LifterMeetResult struct {
 
 type Lifter struct {
 	Name string
-	PB map[string]*PersonalBest // string is division
+	PB map[string]*PersonalBest // string is equip type (raw, wraps)
 	CompetitionResults []*LifterMeetResult
 }
 
