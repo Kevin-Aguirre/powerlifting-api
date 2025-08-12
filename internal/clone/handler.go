@@ -29,6 +29,26 @@ func GetLifters(db *data.Database) http.HandlerFunc {
 	}
 }
 
+func GetLifterNames(db *data.Database) http.HandlerFunc {
+	return func (w http.ResponseWriter, r *http.Request) {
+		fmt.Println("GET /lifters/names")
+
+		names := make([]string, 0)
+		for name := range db.LifterHistory {
+			names = append(
+				names, 
+				name,
+			)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(names); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return 
+		}
+	}
+}
+
 func GetLifter(db *data.Database) http.HandlerFunc {
 	return func (w http.ResponseWriter, r *http.Request) {
 		lifterNameEncoded := chi.URLParam(r, "lifterName")
@@ -97,11 +117,33 @@ func GetMeet(db *data.Database) http.HandlerFunc {
 		if !exists {
 			http.Error(w, "federation not found", http.StatusNotFound)
 			return
+		} else {
+			fmt.Println("GET /meets/" + federationName)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 
 		if err := json.NewEncoder(w).Encode(federationMeets); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return 
+		}
+	}
+}
+
+func GetFederations(db *data.Database) http.HandlerFunc {
+	return func (w http.ResponseWriter, r *http.Request) {
+		fmt.Println("GET /federations")
+		federations := make([]string, 0)
+
+		for fed := range db.FederationMeets {
+			federations = append(
+				federations, 
+				fed,
+			)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(federations); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return 
 		}
