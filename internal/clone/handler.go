@@ -92,7 +92,7 @@ func GetMeet(db *data.Database) http.HandlerFunc {
 			return 
 		}
 
-		federationMeets, exists := db.LifterHistory[federationName]
+		federationMeets, exists := db.FederationMeets[federationName]
 
 		if !exists {
 			http.Error(w, "federation not found", http.StatusNotFound)
