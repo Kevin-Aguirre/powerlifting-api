@@ -16,7 +16,6 @@ func GetLifters(db *data.Database) http.HandlerFunc {
 	return func (w http.ResponseWriter, r *http.Request) {
 		fmt.Println("GET /lifters")
 
-		// Collect Names 
 		lifters := make([]model.Lifter, 0, len(db.LifterHistory))
 		for i := range db.LifterHistory {
 			lifters = append(lifters, *db.LifterHistory[i])
@@ -45,11 +44,64 @@ func GetLifter(db *data.Database) http.HandlerFunc {
 		if !exists {
 			http.Error(w, "lifter not found", http.StatusNotFound)
 			return
+		} else {
+			fmt.Println("GET /lifters/" + lifterName)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 
 		if err := json.NewEncoder(w).Encode(lifter); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return 
+		}
+	}
+}
+
+
+func GetMeets(db *data.Database) http.HandlerFunc {
+	return func (w http.ResponseWriter, r *http.Request) {
+		fmt.Println("GET /meets")
+
+		// Collect Names 
+		meets := make([]model.Meet, 0)
+		for fed := range db.FederationMeets {
+			for meet := range db.FederationMeets[fed] {
+				meets = append(
+					meets, 
+					*db.FederationMeets[fed][meet],
+				)
+
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(meets); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return 
+		}
+	}
+}
+
+func GetMeet(db *data.Database) http.HandlerFunc {
+	return func (w http.ResponseWriter, r *http.Request) {
+		federationNameEncoded := chi.URLParam(r, "federationName")
+		federationName, err := url.QueryUnescape(federationNameEncoded)
+
+		if err != nil {
+			http.Error(w, "invalid federation name", http.StatusBadRequest)
+			return 
+		}
+
+		federationMeets, exists := db.LifterHistory[federationName]
+
+		if !exists {
+			http.Error(w, "federation not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if err := json.NewEncoder(w).Encode(federationMeets); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return 
 		}

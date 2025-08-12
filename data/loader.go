@@ -30,7 +30,7 @@ const (
 	// unit conversion rates, constant in case you want more/less precision
 	// kgToLbConversionRate = 2.204623
 
-	// column header labels (who knows if these get changed, better to have them in one place)
+	// column header labels for entries files (who knows if these get changed, better to have them in one place)
 	colHeaderPlace = "Place"
 	colHeaderName = "Name"
 	colHeaderBirthDate = "BirthDate"
@@ -62,27 +62,37 @@ const (
 	colHeaderEvent = "Event"
 	colHeaderTested = "Tested"
 
+	// column header labels for meet files (also may get changed?)
+	colHeaderFederation = "Federation"
+	colHeaderDate = "Date"
+	colHeaderMeetCountry = "MeetCountry"
+	colHeaderMeetState = "MeetState"
+	colHeaderMeetTown = "MeetTown"
+	colHeaderMeetName = "MeetName"
+	colHeaderRuleSet = "RuleSet"
+
 	// file info 
 	meetEntriesFileName = "entries.csv"
+	meetInfoFileName = "meet.csv"
 
-	meetsRootFolderName = "meet-data"
+	// meetsRootFolderName = "meet-data"
 
 )
 
-// TODO: handle this
-// type Database struct {
-// 	// FederationMeets map[string][]*model.Meet
-// 	LifterHistory map[string]*model.Lifter
-// }
-
 type Database struct {
 	LifterHistory map[string]*model.Lifter
+	FederationMeets map[string][]*model.Meet
 }
+
+func clean(s string) string {
+    return strings.TrimSpace(strings.ReplaceAll(s, "\uFEFF", ""))
+}
+
 
 // findIndex parses a header row in a csv file and given a column name, returns the index if found, else -1.
 func findIndex(headerRow []string, columnName string) int {
 	for i, value := range headerRow {
-		if value == columnName {
+		if clean(value) == clean(columnName) {
 			return i
 		}
 	}
@@ -100,7 +110,7 @@ func getValue(row []string, columnsMap map[string]int, column string) string {
 }
 
 // given a csv file as a slice of string slices, generates map of column name to index.
-func computeColumnsMap(records [][]string) map[string]int {
+func computeEntriesColumnsMap(records [][]string) map[string]int {
 	columnsMap := make(map[string]int)
 	possibleColumns := []string {
 		colHeaderPlace,
@@ -141,6 +151,40 @@ func computeColumnsMap(records [][]string) map[string]int {
 	}
 
 	return columnsMap
+}
+
+// given a csv file as a slice of string slices, generates map of column name to index.
+func computeMeetColumnsMap(records [][]string) map[string]int {
+	columnsMap := make(map[string]int)
+	possibleColumns := []string {
+		colHeaderFederation,
+		colHeaderDate,
+		colHeaderMeetCountry,
+		colHeaderMeetState,
+		colHeaderMeetTown,
+		colHeaderMeetName,
+		colHeaderRuleSet,
+	}
+
+	for _, column := range possibleColumns {
+		index := findIndex(records[0], column)
+		columnsMap[column] = index
+	}
+
+	return columnsMap
+}
+
+func getFederationMeetInfo(row []string, columnsMap map[string]int) (*model.Meet) {
+	meetResult := &model.Meet{
+		Federation: getValue(row, columnsMap, colHeaderFederation),
+		Date: getValue(row, columnsMap, colHeaderDate),
+		MeetCountry: getValue(row, columnsMap, colHeaderMeetCountry),
+		MeetState: getValue(row, columnsMap, colHeaderMeetState),
+		MeetTown: getValue(row, columnsMap, colHeaderMeetTown),
+		MeetName: getValue(row, columnsMap, colHeaderMeetName),
+		RuleSet: getValue(row, columnsMap, colHeaderRuleSet),
+	}
+	return meetResult
 }
 
 // handles creating a LifterMeetResult object given a row of a csv file 
@@ -248,10 +292,23 @@ func ensureLifterExists(db *Database, lifterName string) {
 	}
 }
 
+func ensureFederationExists(db *Database, federationName string) {
+	if _, exists := db.FederationMeets[federationName]; !exists {
+		db.FederationMeets[federationName] = make([]*model.Meet, 0)
+	}
+}
+
 func handleCompetitionResultsUpdate(db *Database, lifterResult *model.LifterMeetResult, lifterName string) {
 	db.LifterHistory[lifterName].CompetitionResults = append(
 		db.LifterHistory[lifterName].CompetitionResults, 
 		lifterResult,
+	)
+}
+
+func handleFederationMeetUpdate(db *Database, meetInfo *model.Meet, federationName string) {
+	db.FederationMeets[federationName] = append(
+		db.FederationMeets[federationName],
+		meetInfo,
 	)
 }
 
@@ -305,11 +362,80 @@ func getBestDeadlift(meetResult *model.LifterMeetResult) float64 {
 	return squat
 }
 
+// TODO: this never returns an error 
+func handleEntriesFile(db *Database, currPath string) error {
+	// attempt to open file
+	file, err := os.Open(currPath)
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return nil
+	}
+	defer file.Close()
+
+	// read csv lines 
+	reader := csv.NewReader(file)
+	reader.LazyQuotes = true
+	records, err := reader.ReadAll()
+
+	// check if failed to read lines
+	if err != nil {
+		fmt.Println("Could not read lines:", err)
+		return nil
+	}
+
+	// map column header labels to their indices
+	columnsMap := computeEntriesColumnsMap(records)
+
+	// iterate through non-header rows 
+	for _, row := range records[1:] {
+		lifterName := row[columnsMap[colHeaderName]]
+		lifterResult := getLifterMeetResult(row, columnsMap)
+		
+		ensureLifterExists(db, lifterName)
+		handleCompetitionResultsUpdate(db, lifterResult, lifterName)
+		handlePBUpdate(db, lifterResult, lifterName)
+	}
+	return nil
+}
+
+// TODO: maybe modularize this csv file code 
+func handleMeetFile(db *Database, currPath string) error {
+	// attempt to open file
+	file, err := os.Open(currPath)
+	if err != nil {
+		fmt.Println("Error opening file:", err)
+		return nil
+	}
+	defer file.Close()
+
+	// read csv lines 
+	reader := csv.NewReader(file)
+	reader.LazyQuotes = true
+	records, err := reader.ReadAll()
+	
+	// check if failed to read lines
+	if err != nil {
+		fmt.Println("Could not read lines:", err)
+		return nil
+	}
+
+	// map column header labels to their indices
+	columnsMap := computeMeetColumnsMap(records)
+
+	row := records[1]
+	idx := columnsMap[colHeaderFederation]
+	federationName := row[idx]
+	meetInfo := getFederationMeetInfo(row, columnsMap)
+	ensureFederationExists(db, federationName)
+	handleFederationMeetUpdate(db, meetInfo, federationName)
+
+	return nil
+}
+
 func LoadDatabase(root string) (*Database, error) {
 	// create Database object 
-	// TODO: uncomment
 	db := &Database {
-		// FederationMeets: make(map[string][]*model.Meet),
+		FederationMeets: make(map[string][]*model.Meet),
 		LifterHistory: make(map[string]*model.Lifter),
 	}
 
@@ -321,48 +447,27 @@ func LoadDatabase(root string) (*Database, error) {
 		}
 
 		// get relative path (not full path)
-		relativePath := strings.Split(currPath, meetsRootFolderName)[1]
+		arr := strings.Split(currPath, "/")
+		fileName := arr[len(arr)-1]
 
-		if (!strings.Contains(relativePath, meetEntriesFileName)) {
-			return nil
+		switch fileName {
+			case meetEntriesFileName:
+				err := handleEntriesFile(db, currPath)
+				if err != nil {
+					fmt.Println("Error handling entries file: ", err)
+				}
+				return nil
+			case meetInfoFileName:
+				err := handleMeetFile(db, currPath)
+				if err != nil {
+					fmt.Println("Error handling meet file: ", err)
+				}
+				return nil
+			default: 
+				return nil
 		}
-
-		// attempt to open file
-		file, err := os.Open(currPath)
-		if err != nil {
-			fmt.Println("Error opening file:", err)
-			return nil
-		}
-		defer file.Close()
-
-		// read csv lines 
-		reader := csv.NewReader(file)
-		reader.LazyQuotes = true
-		records, err := reader.ReadAll()
-
-		// check if failed to read lines
-		if err != nil {
-			fmt.Println("Could not read lines:", err)
-			return nil
-		}
-
-		// map column header labels to their indices
-		columnsMap := computeColumnsMap(records)
-
-		// iterate through non-header rows 
-		for _, row := range records[1:] {
-			lifterName := row[columnsMap[colHeaderName]]
-			lifterResult := getLifterMeetResult(row, columnsMap)
-			
-			ensureLifterExists(db, lifterName)
-			handleCompetitionResultsUpdate(db, lifterResult, lifterName)
-			handlePBUpdate(db, lifterResult, lifterName)
-		}
-		
-		return nil
 	})
-	
-	
+
 	if err != nil {
 		fmt.Printf("Error walking the directory: %v\n", err)
 	}

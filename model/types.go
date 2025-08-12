@@ -1,5 +1,15 @@
 package model
 
+type Meet struct {
+	Federation string
+	Date string
+	MeetCountry string
+	MeetState string
+	MeetTown string
+	MeetName string
+	RuleSet string
+}
+
 type PersonalBest struct {
 	Squat float64
 	Bench float64

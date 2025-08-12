@@ -13,6 +13,9 @@ func NewRouter(db *data.Database) http.Handler {
 	// Get Request
 	r.Get("/lifters", handlers.GetLifters(db))
 	r.Get("/lifters/{lifterName}", handlers.GetLifter(db))
+	r.Get("/meets", handlers.GetMeets(db))
+	r.Get("/meets/{federationName}", handlers.GetMeet(db))
+
 
 	return r
 }
