@@ -7,7 +7,7 @@ A RESTful API for open-source powerlifting data.
 * Add Filtering and Sorting Fields in Requests (especially for all lifters endpoint)
 * Expand database to include meet data (not just lifter data)
 * Include OPL image here 
-* Inlucde Lifter Instagrams 
+* Inlucde Lifter Instagrams and other fields to lifter type (sex, etc. )
 * Include Lifter Personal Records 
 
 ## Contributing
