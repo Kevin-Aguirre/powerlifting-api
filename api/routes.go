@@ -25,3 +25,4 @@ func NewRouter(db *data.Database) http.Handler {
 
 	return r
 }
+
