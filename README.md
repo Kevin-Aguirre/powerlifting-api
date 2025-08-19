@@ -9,6 +9,7 @@ A RESTful API for open-source powerlifting data.
 * Include OPL image here 
 * Inlucde Lifter Instagrams and other fields to lifter type (sex, etc. )
 * Include Lifter Personal Records 
+* Check OPL website for any functionality not listed here
 
 ## Contributing
 If there's a feature missing from this API you'd like to see (that isn't in the TODO list above), feel free to make a pull request, issue, or reach out in any way :) 
