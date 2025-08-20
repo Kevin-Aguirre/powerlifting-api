@@ -12,7 +12,7 @@ A RESTful API for open-source powerlifting data.
 * Check OPL website for any functionality not listed here
 
 ## Contributing
-If there's a feature missing from this API you'd like to see (that isn't in the TODO list above), feel free to make a pull request, issue, or reach out in any way :) 
+If there's a feature missing from this API you'd like to see (that isn't in the TODO list above), feel free to make a pull request, issue, or reach out :) 
 
 ## Depencies 
 Built with Go version 1.24.4
