@@ -5,6 +5,7 @@ import (
 	// "errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -262,13 +263,17 @@ func calculateDots(
 	x := bodyweightKgs
 	numerator := 500 * totalKgs
 	denominator := a + b*x + c*x*x + d*x*x*x + e*x*x*x*x
-	return numerator / denominator
+	result := numerator / denominator
+	if math.IsInf(result, 0) || math.IsNaN(result) {
+		return 0
+	}
+	return result
 
 }
 
 func getBestSquat(meetResult *model.LifterMeetResult) float64 {
 	squat, err := strconv.ParseFloat(meetResult.Best3SquatKg, 64)
-	if err != nil {
+	if err != nil || math.IsNaN(squat) {
 		return 0
 	}
 	return squat
@@ -276,7 +281,7 @@ func getBestSquat(meetResult *model.LifterMeetResult) float64 {
 
 func getBestBench(meetResult *model.LifterMeetResult) float64 {
 	squat, err := strconv.ParseFloat(meetResult.Best3BenchKg, 64)
-	if err != nil {
+	if err != nil || math.IsNaN(squat) {
 		return 0
 	}
 	return squat
@@ -356,7 +361,7 @@ func handlePBUpdate(db *Database, lifterResult *model.LifterMeetResult, lifterNa
 
 func getBestDeadlift(meetResult *model.LifterMeetResult) float64 {
 	squat, err := strconv.ParseFloat(meetResult.Best3DeadliftKg, 64)
-	if err != nil {
+	if err != nil || math.IsNaN(squat) {
 		return 0
 	}
 	return squat

@@ -1,5 +1,6 @@
 package gitutils
 
+// currently unused in workflow, meant for future auto cloning
 import (
 	"fmt"
 	"os"
