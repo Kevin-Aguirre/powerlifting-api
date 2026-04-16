@@ -3,22 +3,21 @@ package main
 import (
 	"fmt"
 	"net/http"
+
 	"github.com/Kevin-Aguirre/powerlifting-api/api"
 	"github.com/Kevin-Aguirre/powerlifting-api/data"
 )
 
 func main() {
-	fmt.Println("Loading powerlifting data...")
-	var dataFolderPath = "./opl-data/meet-data"
-	db, db_err := data.LoadDatabase(dataFolderPath)
-	if db_err != nil {
-		panic(fmt.Errorf("Failed to load data: %w", db_err))
+	ds := data.NewDataStore()
+
+	err := ds.Init(data.DefaultRepoPath, data.DefaultRepoURL, data.DefaultDataPath, data.RefreshInterval)
+	if err != nil {
+		panic(fmt.Errorf("failed to initialize data: %w", err))
 	}
 
-	fmt.Println("Successfully loaded data")
 	fmt.Println("Starting server on :8080")
-	err := http.ListenAndServe(":8080", api.NewRouter(db))
-	if err != nil {
+	if err := http.ListenAndServe(":8080", api.NewRouter(ds)); err != nil {
 		fmt.Println("Server error:", err)
 	}
 }
