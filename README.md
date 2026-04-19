@@ -612,3 +612,4 @@ Built with Go version 1.24.4
 * [Open Powerlifting Rankings](https://www.openpowerlifting.org/)
 * [Open Powerlifting Site](https://openpowerlifting.gitlab.io/opl-csv/)
 * [Open Powerlifting Data](https://gitlab.com/openpowerlifting/opl-data)
+ 
