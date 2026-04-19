@@ -3,6 +3,7 @@ package model
 import (
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -44,4 +45,29 @@ func ParsePagination(r *http.Request) PaginationParams {
 	}
 
 	return p
+}
+
+type SortParams struct {
+	Field string
+	Order string // "asc" or "desc"
+}
+
+func ParseSort(r *http.Request, validFields []string, defaultField string) SortParams {
+	field := r.URL.Query().Get("sort")
+	order := strings.ToLower(r.URL.Query().Get("order"))
+
+	valid := false
+	for _, f := range validFields {
+		if field == f {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		field = defaultField
+	}
+	if order != "desc" {
+		order = "asc"
+	}
+	return SortParams{Field: field, Order: order}
 }

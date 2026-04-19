@@ -118,29 +118,29 @@ func TestBuildLiftAttempts(t *testing.T) {
 
 func TestCalculateDots(t *testing.T) {
 	// Male calculation
-	dots := calculateDots(83, 600, "M")
+	dots := CalculateDots(83, 600, "M")
 	if dots <= 0 {
 		t.Errorf("male DOTS should be positive, got %v", dots)
 	}
 
 	// Female calculation
-	dots = calculateDots(63, 400, "F")
+	dots = CalculateDots(63, 400, "F")
 	if dots <= 0 {
 		t.Errorf("female DOTS should be positive, got %v", dots)
 	}
 
 	// Mx returns 0
-	if dots := calculateDots(83, 600, "Mx"); dots != 0 {
+	if dots := CalculateDots(83, 600, "Mx"); dots != 0 {
 		t.Errorf("Mx DOTS = %v, want 0", dots)
 	}
 
 	// Unknown sex returns 0
-	if dots := calculateDots(83, 600, ""); dots != 0 {
+	if dots := CalculateDots(83, 600, ""); dots != 0 {
 		t.Errorf("empty sex DOTS = %v, want 0", dots)
 	}
 
 	// Zero bodyweight should not panic (denominator could be near-zero)
-	dots = calculateDots(0, 600, "M")
+	dots = CalculateDots(0, 600, "M")
 	if math.IsInf(dots, 0) || math.IsNaN(dots) {
 		t.Errorf("zero bodyweight should not produce Inf/NaN, got %v", dots)
 	}

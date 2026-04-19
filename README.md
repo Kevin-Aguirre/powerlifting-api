@@ -1,5 +1,9 @@
 
 # RESTful Go API for OpenPowerlifting Data
+
+[![CI](https://github.com/Kevin-Aguirre/powerlifting-api/actions/workflows/ci.yml/badge.svg)](https://github.com/Kevin-Aguirre/powerlifting-api/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Kevin-Aguirre/powerlifting-api/graph/badge.svg)](https://codecov.io/gh/Kevin-Aguirre/powerlifting-api)
+
 A RESTful API for open-source powerlifting data from the [OpenPowerlifting](https://www.openpowerlifting.org/) project.
 
 ## Getting Started
@@ -8,7 +12,19 @@ A RESTful API for open-source powerlifting data from the [OpenPowerlifting](http
 - Go 1.23+
 - Git (to clone the OPL dataset)
 
-### 1. Clone this repo
+### Option A: Docker (recommended)
+
+```bash
+git clone https://github.com/Kevin-Aguirre/powerlifting-api.git
+cd powerlifting-api
+docker compose up
+```
+
+The container clones the OPL dataset (~1 GB) into a named volume on first start. Data persists across restarts and reloads automatically every hour.
+
+### Option B: Run locally
+
+#### 1. Clone this repo
 ```bash
 git clone https://github.com/Kevin-Aguirre/powerlifting-api.git
 cd powerlifting-api
@@ -25,12 +41,17 @@ This will create an `opl-data/` folder containing the `meet-data/` directory the
 
 > **Note:** The OPL dataset is large (~1GB+). The clone may take several minutes.
 
-### 3. Update the data path in `main.go`
-Open `main.go` and update `dataFolderPath` to point to the cloned data:
+### 3. Configure (optional)
 
-```go
-var dataFolderPath = "./opl-data/meet-data"
-```
+All settings can be controlled via environment variables. Defaults work out of the box if you cloned `opl-data` inside the project directory.
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `8080` | HTTP port to listen on |
+| `REPO_URL` | OPL GitLab URL | Git URL of the OPL dataset |
+| `REPO_PATH` | `./opl-data` | Local path to clone/pull the dataset |
+| `DATA_PATH` | `./opl-data/meet-data` | Path to the `meet-data` directory |
+| `REFRESH_INTERVAL` | `1h` | How often to check for new data (e.g. `30m`, `2h`) |
 
 ### 4. Install dependencies
 ```bash
@@ -42,9 +63,56 @@ go mod download
 go run main.go
 ```
 
-The server starts on **`:8080`**. Once loaded, you can visit the root endpoint at `http://localhost:8080/` for a JSON overview of all available endpoints.
+The server starts on **`:8080`** (or the port set by `PORT`). Once loaded, you can visit the root endpoint at `http://localhost:8080/` for a JSON overview of all available endpoints.
 
 > **Note:** Loading the full dataset takes a while on startup — this is expected.
+
+---
+
+## Improvements
+
+### Rate Limiting
+Each IP is limited to **120 requests per minute** with a burst allowance of 20. Requests that exceed the limit receive a `429 Too Many Requests` response:
+```json
+{ "error": "rate limit exceeded" }
+```
+The limiter respects `X-Forwarded-For` headers for clients behind a proxy.
+
+### Graceful Shutdown
+The server handles `SIGINT` and `SIGTERM`. On shutdown it stops accepting new connections and waits up to 30 seconds for in-flight requests to complete before exiting.
+
+### Environment-based Config
+All settings are configurable via environment variables — no recompilation required. See the [Configuration](#3-configure-optional) section in Getting Started.
+
+### Health Endpoint
+`GET /health` returns the server status and when data was last successfully loaded:
+```json
+{
+  "status": "ok",
+  "lastUpdated": "2024-06-10T14:32:00Z"
+}
+```
+Returns `503 Service Unavailable` if the database is still loading on startup.
+
+### Structured Logging
+All log output uses Go's `log/slog` in JSON format, with structured key-value fields:
+```json
+{"time":"2024-06-10T14:32:00Z","level":"INFO","msg":"request","method":"GET","path":"/lifters","ip":"127.0.0.1"}
+```
+
+### Prometheus Metrics
+`GET /metrics` exposes a standard Prometheus scrape endpoint with:
+- `http_requests_total` — request count by method, route pattern, and status code
+- `http_request_duration_seconds` — latency histogram by method and route
+- `data_load_duration_seconds` — time taken for the most recent full data load
+- `data_loads_total` — total number of completed data loads
+- Default Go runtime metrics (GC, goroutines, memory)
+
+### Precomputed Indexes
+The `/lifters/top` leaderboard and `/records` endpoints are built once at load time into sorted slices. Requests filter and paginate those slices directly instead of scanning and re-sorting 1M+ lifters on every call.
+
+### Concurrent Data Loading
+Meet and entries CSV files (62K+ files) are parsed in parallel using a `runtime.NumCPU()`-worker pool. The I/O-bound parse phase runs concurrently; results are merged serially to avoid lock contention.
 
 ---
 
@@ -85,6 +153,23 @@ Applies to: `bodyweightKg`, `totalKg`, squat/bench/deadlift attempts and bests, 
 **Example:** `GET /lifters/Jessica%20Ma?unit=lbs`
 
 ### Endpoints
+
+#### `GET /health`
+
+Returns server status and the timestamp of the last successful data load.
+
+```json
+{
+  "status": "ok",
+  "lastUpdated": "2024-06-10T14:32:00Z"
+}
+```
+
+**Status values:**
+- `ok` — data is loaded and ready
+- `loading` — server started but data hasn't finished loading yet (returns `503`)
+
+---
 
 #### `GET /`
 
@@ -516,10 +601,6 @@ Empty or zero-value fields are omitted from the response.
 | `pb` | object | PersonalBest (squat, bench, deadlift, total, dots) |
 
 ---
-
-## TODO
-* Add sorting query parameters to list endpoints
-* Include OPL image/logo
 
 ## Contributing
 If there's a feature missing from this API you'd like to see, feel free to make a pull request, issue, or reach out :)

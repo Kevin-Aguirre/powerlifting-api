@@ -2,101 +2,115 @@ package data
 
 import (
 	"encoding/csv"
-	// "errors"
-	"fmt"
 	"io/fs"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/Kevin-Aguirre/powerlifting-api/model"
 )
 
 const (
-	// dots coefficient amounts
-	dotsMaleA = -307.75076
-	dotsMaleB = 24.0900756
-	dotsMaleC = -0.1918759221
-	dotsMaleD = 0.0007391293
-	dotsMaleE = -0.000001093
+	dotsMaleA   = -307.75076
+	dotsMaleB   = 24.0900756
+	dotsMaleC   = -0.1918759221
+	dotsMaleD   = 0.0007391293
+	dotsMaleE   = -0.000001093
 	dotsFemaleA = -57.96288
 	dotsFemaleB = 13.6175032
 	dotsFemaleC = -0.1126655495
 	dotsFemaleD = 0.0005158568
 	dotsFemaleE = -0.0000010706
 
-	// TODO: determine if this gets used or not 
-	// unit conversion rates, constant in case you want more/less precision
-	// kgToLbConversionRate = 2.204623
-
-	// column header labels for entries files (who knows if these get changed, better to have them in one place)
-	colHeaderPlace = "Place"
-	colHeaderName = "Name"
-	colHeaderBirthDate = "BirthDate"
-	colHeaderSex = "Sex"
-	colHeaderBirthYear = "BirthYear"
-	colHeaderAge = "Age"
-	colHeaderCountry = "Country"
-	colHeaderState = "State"
-	colHeaderEquipment = "Equipment"
-	colHeaderDivision = "Division"
-	colHeaderBodyweightKg = "BodyweightKg"
-	colHeaderWeightClassKg = "WeightClassKg"
-	colHeaderSquat1Kg = "Squat1Kg"
-	colHeaderSquat2Kg = "Squat2Kg"
-	colHeaderSquat3Kg = "Squat3Kg"
-	colHeaderBest3SquatKg = "Best3SquatKg"
-	colHeaderSquat4Kg = "Squat4Kg"
-	colHeaderBench1Kg = "Bench1Kg"
-	colHeaderBench2Kg = "Bench2Kg"
-	colHeaderBench3Kg = "Bench3Kg"
-	colHeaderBest3BenchKg = "Best3BenchKg"
-	colHeaderBench4Kg = "Bench4Kg"
-	colHeaderDeadlift1Kg = "Deadlift1Kg"
-	colHeaderDeadlift2Kg = "Deadlift2Kg"
-	colHeaderDeadlift3Kg = "Deadlift3Kg"
+	colHeaderPlace           = "Place"
+	colHeaderName            = "Name"
+	colHeaderBirthDate       = "BirthDate"
+	colHeaderSex             = "Sex"
+	colHeaderBirthYear       = "BirthYear"
+	colHeaderAge             = "Age"
+	colHeaderCountry         = "Country"
+	colHeaderState           = "State"
+	colHeaderEquipment       = "Equipment"
+	colHeaderDivision        = "Division"
+	colHeaderBodyweightKg    = "BodyweightKg"
+	colHeaderWeightClassKg   = "WeightClassKg"
+	colHeaderSquat1Kg        = "Squat1Kg"
+	colHeaderSquat2Kg        = "Squat2Kg"
+	colHeaderSquat3Kg        = "Squat3Kg"
+	colHeaderBest3SquatKg    = "Best3SquatKg"
+	colHeaderSquat4Kg        = "Squat4Kg"
+	colHeaderBench1Kg        = "Bench1Kg"
+	colHeaderBench2Kg        = "Bench2Kg"
+	colHeaderBench3Kg        = "Bench3Kg"
+	colHeaderBest3BenchKg    = "Best3BenchKg"
+	colHeaderBench4Kg        = "Bench4Kg"
+	colHeaderDeadlift1Kg     = "Deadlift1Kg"
+	colHeaderDeadlift2Kg     = "Deadlift2Kg"
+	colHeaderDeadlift3Kg     = "Deadlift3Kg"
 	colHeaderBest3DeadliftKg = "Best3DeadliftKg"
-	colHeaderDeadlift4Kg = "Deadlift4Kg"
-	colHeaderTotalKg = "TotalKg"
-	colHeaderEvent = "Event"
-	colHeaderTested = "Tested"
+	colHeaderDeadlift4Kg     = "Deadlift4Kg"
+	colHeaderTotalKg         = "TotalKg"
+	colHeaderEvent           = "Event"
+	colHeaderTested          = "Tested"
 
-	// column header labels for meet files (also may get changed?)
-	colHeaderFederation = "Federation"
-	colHeaderDate = "Date"
+	colHeaderFederation  = "Federation"
+	colHeaderDate        = "Date"
 	colHeaderMeetCountry = "MeetCountry"
-	colHeaderMeetState = "MeetState"
-	colHeaderMeetTown = "MeetTown"
-	colHeaderMeetName = "MeetName"
-	colHeaderRuleSet = "RuleSet"
+	colHeaderMeetState   = "MeetState"
+	colHeaderMeetTown    = "MeetTown"
+	colHeaderMeetName    = "MeetName"
+	colHeaderRuleSet     = "RuleSet"
 
-	// file info 
 	meetEntriesFileName = "entries.csv"
-	meetInfoFileName = "meet.csv"
-
-	// meetsRootFolderName = "meet-data"
-
+	meetInfoFileName    = "meet.csv"
 )
+
+// PrecomputedTopEntry is an indexed entry for the top-lifters leaderboard, sorted by DOTS desc at load time.
+type PrecomputedTopEntry struct {
+	Name          string
+	Equipment     string
+	Sex           string
+	WeightClassKg string
+	PB            *model.PersonalBest
+}
+
+type Database struct {
+	LifterHistory   map[string]*model.Lifter
+	FederationMeets map[string][]*model.Meet
+	MeetResults     map[string][]*model.LifterMeetResult
+
+	// Precomputed indexes — built once at load time, read-only during serving.
+	TopLifters []*PrecomputedTopEntry // sorted by DOTS desc
+	Records    []model.Record        // sorted by sex / equipment / weightClass
+}
 
 // MeetKey uniquely identifies a meet by federation and name.
 func MeetKey(federation, meetName string) string {
 	return federation + "|" + meetName
 }
 
-type Database struct {
-	LifterHistory   map[string]*model.Lifter
-	FederationMeets map[string][]*model.Meet
-	MeetResults     map[string][]*model.LifterMeetResult // key: MeetKey(federation, meetName)
+// parsedMeet is the result of parsing a single meet.csv without touching the database.
+type parsedMeet struct {
+	federation string
+	meet       *model.Meet
+}
+
+// parsedEntriesFile is the result of parsing a single entries.csv without touching the database.
+type parsedEntriesFile struct {
+	key     string // MeetKey(federation, meetName), empty if meet info missing
+	results []*model.LifterMeetResult
 }
 
 func clean(s string) string {
-    return strings.TrimSpace(strings.ReplaceAll(s, "\uFEFF", ""))
+	return strings.TrimSpace(strings.ReplaceAll(s, "\uFEFF", ""))
 }
 
-
-// findIndex parses a header row in a csv file and given a column name, returns the index if found, else -1.
 func findIndex(headerRow []string, columnName string) int {
 	for i, value := range headerRow {
 		if clean(value) == clean(columnName) {
@@ -106,8 +120,6 @@ func findIndex(headerRow []string, columnName string) int {
 	return -1
 }
 
-// getValue accepts a csv data row, a columnsMap, and a column name. 
-// return the value of the csv row given the index stored in columnMap
 func getValue(row []string, columnsMap map[string]int, column string) string {
 	idx := columnsMap[column]
 	if idx == -1 || idx >= len(row) {
@@ -116,86 +128,45 @@ func getValue(row []string, columnsMap map[string]int, column string) string {
 	return row[idx]
 }
 
-// given a csv file as a slice of string slices, generates map of column name to index.
 func computeEntriesColumnsMap(records [][]string) map[string]int {
 	columnsMap := make(map[string]int)
-	possibleColumns := []string {
-		colHeaderPlace,
-		colHeaderName,
-		colHeaderBirthDate,
-		colHeaderSex,
-		colHeaderBirthYear,
-		colHeaderAge,
-		colHeaderCountry,
-		colHeaderState,
-		colHeaderEquipment,
-		colHeaderDivision,
-		colHeaderBodyweightKg,
-		colHeaderWeightClassKg,
-		colHeaderSquat1Kg,
-		colHeaderSquat2Kg,
-		colHeaderSquat3Kg,
-		colHeaderBest3SquatKg,
-		colHeaderSquat4Kg,
-		colHeaderBench1Kg,
-		colHeaderBench2Kg,
-		colHeaderBench3Kg,
-		colHeaderBest3BenchKg,
-		colHeaderBench4Kg,
-		colHeaderDeadlift1Kg,
-		colHeaderDeadlift2Kg,
-		colHeaderDeadlift3Kg,
-		colHeaderBest3DeadliftKg,
-		colHeaderDeadlift4Kg,
-		colHeaderTotalKg,
-		colHeaderEvent,
-		colHeaderTested,
+	for _, column := range []string{
+		colHeaderPlace, colHeaderName, colHeaderBirthDate, colHeaderSex,
+		colHeaderBirthYear, colHeaderAge, colHeaderCountry, colHeaderState,
+		colHeaderEquipment, colHeaderDivision, colHeaderBodyweightKg, colHeaderWeightClassKg,
+		colHeaderSquat1Kg, colHeaderSquat2Kg, colHeaderSquat3Kg, colHeaderBest3SquatKg, colHeaderSquat4Kg,
+		colHeaderBench1Kg, colHeaderBench2Kg, colHeaderBench3Kg, colHeaderBest3BenchKg, colHeaderBench4Kg,
+		colHeaderDeadlift1Kg, colHeaderDeadlift2Kg, colHeaderDeadlift3Kg, colHeaderBest3DeadliftKg, colHeaderDeadlift4Kg,
+		colHeaderTotalKg, colHeaderEvent, colHeaderTested,
+	} {
+		columnsMap[column] = findIndex(records[0], column)
 	}
-
-	for _, column := range possibleColumns {
-		index := findIndex(records[0], column)
-		columnsMap[column] = index
-	}
-
 	return columnsMap
 }
 
-// given a csv file as a slice of string slices, generates map of column name to index.
 func computeMeetColumnsMap(records [][]string) map[string]int {
 	columnsMap := make(map[string]int)
-	possibleColumns := []string {
-		colHeaderFederation,
-		colHeaderDate,
-		colHeaderMeetCountry,
-		colHeaderMeetState,
-		colHeaderMeetTown,
-		colHeaderMeetName,
-		colHeaderRuleSet,
+	for _, column := range []string{
+		colHeaderFederation, colHeaderDate, colHeaderMeetCountry,
+		colHeaderMeetState, colHeaderMeetTown, colHeaderMeetName, colHeaderRuleSet,
+	} {
+		columnsMap[column] = findIndex(records[0], column)
 	}
-
-	for _, column := range possibleColumns {
-		index := findIndex(records[0], column)
-		columnsMap[column] = index
-	}
-
 	return columnsMap
 }
 
-func getFederationMeetInfo(row []string, columnsMap map[string]int) (*model.Meet) {
-	meetResult := &model.Meet{
-		Federation: getValue(row, columnsMap, colHeaderFederation),
-		Date: getValue(row, columnsMap, colHeaderDate),
+func getFederationMeetInfo(row []string, columnsMap map[string]int) *model.Meet {
+	return &model.Meet{
+		Federation:  getValue(row, columnsMap, colHeaderFederation),
+		Date:        getValue(row, columnsMap, colHeaderDate),
 		MeetCountry: getValue(row, columnsMap, colHeaderMeetCountry),
-		MeetState: getValue(row, columnsMap, colHeaderMeetState),
-		MeetTown: getValue(row, columnsMap, colHeaderMeetTown),
-		MeetName: getValue(row, columnsMap, colHeaderMeetName),
-		RuleSet: getValue(row, columnsMap, colHeaderRuleSet),
+		MeetState:   getValue(row, columnsMap, colHeaderMeetState),
+		MeetTown:    getValue(row, columnsMap, colHeaderMeetTown),
+		MeetName:    getValue(row, columnsMap, colHeaderMeetName),
+		RuleSet:     getValue(row, columnsMap, colHeaderRuleSet),
 	}
-	return meetResult
 }
 
-// handles creating a LifterMeetResult object given a row of a csv file 
-// parseInt parses a string to int, returning 0 if empty or invalid.
 func parseInt(s string) int {
 	if s == "" {
 		return 0
@@ -207,7 +178,6 @@ func parseInt(s string) int {
 	return v
 }
 
-// parseFloat parses a string to float64, returning 0 if empty or invalid.
 func parseFloat(s string) float64 {
 	if s == "" {
 		return 0
@@ -219,8 +189,6 @@ func parseFloat(s string) float64 {
 	return v
 }
 
-// buildLiftAttempts creates a LiftAttempts from raw CSV values.
-// Returns nil if all values are zero/empty (so omitempty drops the field).
 func buildLiftAttempts(a1, a2, a3, a4, best string) *model.LiftAttempts {
 	la := &model.LiftAttempts{
 		Attempt1: parseFloat(a1),
@@ -235,8 +203,8 @@ func buildLiftAttempts(a1, a2, a3, a4, best string) *model.LiftAttempts {
 	return la
 }
 
-func getLifterMeetResult(row []string, columnsMap map[string]int) (*model.LifterMeetResult) {
-	lifterResult := &model.LifterMeetResult{
+func getLifterMeetResult(row []string, columnsMap map[string]int) *model.LifterMeetResult {
+	return &model.LifterMeetResult{
 		Place:         getValue(row, columnsMap, colHeaderPlace),
 		Name:          getValue(row, columnsMap, colHeaderName),
 		BirthDate:     getValue(row, columnsMap, colHeaderBirthDate),
@@ -274,74 +242,31 @@ func getLifterMeetResult(row []string, columnsMap map[string]int) (*model.Lifter
 		Event:   getValue(row, columnsMap, colHeaderEvent),
 		Tested:  getValue(row, columnsMap, colHeaderTested),
 	}
-	return lifterResult
 }
 
-
-// TODO: use these or not 
-// func lbsToKg(n float64) float64 {
-// 	return n / kgToLbConversionRate
-// }
-
-// func kgToLbs(n float64) float64 {
-// 	return n * kgToLbConversionRate
-// }
-
-func calculateDots(
-	bodyweightKgs float64,
-	totalKgs float64,  
-	gender string,
-) float64 {
+func CalculateDots(bodyweightKgs, totalKgs float64, gender string) float64 {
 	var a, b, c, d, e float64
 	switch gender {
-		case "M":
-			a = dotsMaleA
-			b = dotsMaleB
-			c = dotsMaleC
-			d = dotsMaleD
-			e = dotsMaleE
-		case "F":
-			a = dotsFemaleA
-			b = dotsFemaleB
-			c = dotsFemaleC
-			d = dotsFemaleD
-			e = dotsFemaleE
-		// im not sure how to account for Mx or missing sex field, safest option to leave it blank
-		case "Mx":
-		default:
-			return 0
+	case "M":
+		a, b, c, d, e = dotsMaleA, dotsMaleB, dotsMaleC, dotsMaleD, dotsMaleE
+	case "F":
+		a, b, c, d, e = dotsFemaleA, dotsFemaleB, dotsFemaleC, dotsFemaleD, dotsFemaleE
+	default:
+		return 0
 	}
-
 	x := bodyweightKgs
-	numerator := 500 * totalKgs
-	denominator := a + b*x + c*x*x + d*x*x*x + e*x*x*x*x
-	result := numerator / denominator
+	result := (500 * totalKgs) / (a + b*x + c*x*x + d*x*x*x + e*x*x*x*x)
 	if math.IsInf(result, 0) || math.IsNaN(result) {
 		return 0
 	}
 	return result
-
-}
-
-func getBestSquat(meetResult *model.LifterMeetResult) float64 {
-	if meetResult.Squat == nil {
-		return 0
-	}
-	return meetResult.Squat.Best
-}
-
-func getBestBench(meetResult *model.LifterMeetResult) float64 {
-	if meetResult.Bench == nil {
-		return 0
-	}
-	return meetResult.Bench.Best
 }
 
 func ensureLifterExists(db *Database, lifterName string) {
 	if _, exists := db.LifterHistory[lifterName]; !exists {
 		db.LifterHistory[lifterName] = &model.Lifter{
-			Name: lifterName,
-			PB: make(map[string]*model.PersonalBest),
+			Name:               lifterName,
+			PB:                 make(map[string]*model.PersonalBest),
 			CompetitionResults: []*model.LifterMeetResult{},
 		}
 	}
@@ -355,72 +280,55 @@ func ensureFederationExists(db *Database, federationName string) {
 
 func handleCompetitionResultsUpdate(db *Database, lifterResult *model.LifterMeetResult, lifterName string) {
 	db.LifterHistory[lifterName].CompetitionResults = append(
-		db.LifterHistory[lifterName].CompetitionResults, 
+		db.LifterHistory[lifterName].CompetitionResults,
 		lifterResult,
 	)
 }
 
 func handleFederationMeetUpdate(db *Database, meetInfo *model.Meet, federationName string) {
-	db.FederationMeets[federationName] = append(
-		db.FederationMeets[federationName],
-		meetInfo,
-	)
+	db.FederationMeets[federationName] = append(db.FederationMeets[federationName], meetInfo)
 }
 
 func handlePBUpdate(db *Database, lifterResult *model.LifterMeetResult, lifterName string) {
-	s := getBestSquat(lifterResult)
-	b := getBestBench(lifterResult)
-	d := getBestDeadlift(lifterResult)
-	lifterWeightKg := lifterResult.BodyweightKg
-	computeDotsFlag := lifterWeightKg > 0
-	
-	total := s + b + d
+	squat := float64(0)
+	if lifterResult.Squat != nil {
+		squat = lifterResult.Squat.Best
+	}
+	bench := float64(0)
+	if lifterResult.Bench != nil {
+		bench = lifterResult.Bench.Best
+	}
+	deadlift := float64(0)
+	if lifterResult.Deadlift != nil {
+		deadlift = lifterResult.Deadlift.Best
+	}
 
+	total := squat + bench + deadlift
 	var currDots float64
-	if computeDotsFlag {
-		currDots = calculateDots(
-			lifterWeightKg,
-			total,
-			lifterResult.Sex,
-		)
-	} else {
-		currDots = 0
-	}
-	
-	rowAsPB := &model.PersonalBest{
-		Squat: s,
-		Bench: b,
-		Deadlift: d,
-		Total: total,
-		Dots: currDots,
+	if lifterResult.BodyweightKg > 0 {
+		currDots = CalculateDots(lifterResult.BodyweightKg, total, lifterResult.Sex)
 	}
 
-	if _, exists := db.LifterHistory[lifterName].PB[lifterResult.Equipment]; !exists {
-		db.LifterHistory[lifterName].PB[lifterResult.Equipment] = rowAsPB
-	} else {
-		prevDots := db.LifterHistory[lifterName].PB[lifterResult.Equipment].Dots
+	candidate := &model.PersonalBest{
+		Squat:    squat,
+		Bench:    bench,
+		Deadlift: deadlift,
+		Total:    total,
+		Dots:     currDots,
+	}
 
-		if (currDots > prevDots) {
-			db.LifterHistory[lifterName].PB[lifterResult.Equipment] = rowAsPB
-		}
+	existing, ok := db.LifterHistory[lifterName].PB[lifterResult.Equipment]
+	if !ok || currDots > existing.Dots {
+		db.LifterHistory[lifterName].PB[lifterResult.Equipment] = candidate
 	}
 }
 
-func getBestDeadlift(meetResult *model.LifterMeetResult) float64 {
-	if meetResult.Deadlift == nil {
-		return 0
-	}
-	return meetResult.Deadlift.Best
-}
-
-// readMeetInfo reads the meet.csv in the same directory as entriesPath and returns federation + meetName.
-func readMeetInfo(entriesPath string) (federation, meetName string) {
-	dir := filepath.Dir(entriesPath)
-	meetPath := filepath.Join(dir, meetInfoFileName)
-
+// readMeetInfo reads the meet.csv sibling and returns federation, meetName, and date.
+func readMeetInfo(entriesPath string) (federation, meetName, date string) {
+	meetPath := filepath.Join(filepath.Dir(entriesPath), meetInfoFileName)
 	file, err := os.Open(meetPath)
 	if err != nil {
-		return "", ""
+		return "", "", ""
 	}
 	defer file.Close()
 
@@ -428,135 +336,260 @@ func readMeetInfo(entriesPath string) (federation, meetName string) {
 	reader.LazyQuotes = true
 	records, err := reader.ReadAll()
 	if err != nil || len(records) < 2 {
-		return "", ""
+		return "", "", ""
 	}
 
 	columnsMap := computeMeetColumnsMap(records)
 	row := records[1]
-	return getValue(row, columnsMap, colHeaderFederation), getValue(row, columnsMap, colHeaderMeetName)
+	return getValue(row, columnsMap, colHeaderFederation),
+		getValue(row, columnsMap, colHeaderMeetName),
+		getValue(row, columnsMap, colHeaderDate)
 }
 
-func handleEntriesFile(db *Database, currPath string) error {
-	// attempt to open file
-	file, err := os.Open(currPath)
+// parseMeetFileRaw parses a meet.csv and returns its data without touching any database.
+func parseMeetFileRaw(path string) (parsedMeet, bool) {
+	file, err := os.Open(path)
 	if err != nil {
-		fmt.Println("Error opening file:", err)
-		return nil
+		slog.Error("error opening file", "path", path, "error", err)
+		return parsedMeet{}, false
 	}
 	defer file.Close()
 
-	// read csv lines
 	reader := csv.NewReader(file)
 	reader.LazyQuotes = true
 	records, err := reader.ReadAll()
-
-	// check if failed to read lines
-	if err != nil {
-		fmt.Println("Could not read lines:", err)
-		return nil
+	if err != nil || len(records) < 2 {
+		return parsedMeet{}, false
 	}
 
-	// map column header labels to their indices
-	columnsMap := computeEntriesColumnsMap(records)
+	columnsMap := computeMeetColumnsMap(records)
+	row := records[1]
+	federation := getValue(row, columnsMap, colHeaderFederation)
+	meet := getFederationMeetInfo(row, columnsMap)
+	return parsedMeet{federation: federation, meet: meet}, federation != ""
+}
 
-	// read sibling meet.csv to index results by meet
-	federation, meetName := readMeetInfo(currPath)
+// parseEntriesFileRaw parses an entries.csv and returns all results without touching any database.
+func parseEntriesFileRaw(path string) (parsedEntriesFile, bool) {
+	file, err := os.Open(path)
+	if err != nil {
+		slog.Error("error opening file", "path", path, "error", err)
+		return parsedEntriesFile{}, false
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	reader.LazyQuotes = true
+	records, err := reader.ReadAll()
+	if err != nil {
+		slog.Error("could not read lines", "path", path, "error", err)
+		return parsedEntriesFile{}, false
+	}
+	if len(records) < 1 {
+		return parsedEntriesFile{}, false
+	}
+
+	columnsMap := computeEntriesColumnsMap(records)
+	federation, meetName, meetDate := readMeetInfo(path)
 	var key string
 	if federation != "" && meetName != "" {
 		key = MeetKey(federation, meetName)
 	}
 
-	// iterate through non-header rows
+	results := make([]*model.LifterMeetResult, 0, len(records)-1)
 	for _, row := range records[1:] {
-		lifterName := row[columnsMap[colHeaderName]]
-		lifterResult := getLifterMeetResult(row, columnsMap)
-
-		ensureLifterExists(db, lifterName)
-		handleCompetitionResultsUpdate(db, lifterResult, lifterName)
-		handlePBUpdate(db, lifterResult, lifterName)
-
-		// index by meet
-		if key != "" {
-			db.MeetResults[key] = append(db.MeetResults[key], lifterResult)
-		}
+		r := getLifterMeetResult(row, columnsMap)
+		r.MeetFederation = federation
+		r.MeetName = meetName
+		r.MeetDate = meetDate
+		results = append(results, r)
 	}
-	return nil
+
+	return parsedEntriesFile{key: key, results: results}, true
 }
 
-// TODO: maybe modularize this csv file code 
-func handleMeetFile(db *Database, currPath string) error {
-	// attempt to open file
-	file, err := os.Open(currPath)
-	if err != nil {
-		fmt.Println("Error opening file:", err)
-		return nil
-	}
-	defer file.Close()
-
-	// read csv lines 
-	reader := csv.NewReader(file)
-	reader.LazyQuotes = true
-	records, err := reader.ReadAll()
-	
-	// check if failed to read lines
-	if err != nil {
-		fmt.Println("Could not read lines:", err)
+// parallelParse runs fn concurrently over paths using numWorkers goroutines.
+// The parse phase (I/O) runs in parallel; results are returned for serial merging by the caller.
+func parallelParse[T any](paths []string, numWorkers int, fn func(string) (T, bool)) []T {
+	if len(paths) == 0 {
 		return nil
 	}
 
-	// map column header labels to their indices
-	columnsMap := computeMeetColumnsMap(records)
+	ch := make(chan string, len(paths))
+	for _, p := range paths {
+		ch <- p
+	}
+	close(ch)
 
-	row := records[1]
-	idx := columnsMap[colHeaderFederation]
-	federationName := row[idx]
-	meetInfo := getFederationMeetInfo(row, columnsMap)
-	ensureFederationExists(db, federationName)
-	handleFederationMeetUpdate(db, meetInfo, federationName)
+	type item struct {
+		val T
+		ok  bool
+	}
+	resultCh := make(chan item, len(paths))
 
-	return nil
+	var wg sync.WaitGroup
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for p := range ch {
+				v, ok := fn(p)
+				resultCh <- item{v, ok}
+			}
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	var out []T
+	for it := range resultCh {
+		if it.ok {
+			out = append(out, it.val)
+		}
+	}
+	return out
 }
 
 func LoadDatabase(root string) (*Database, error) {
-	// create Database object 
-	db := &Database {
+	db := &Database{
 		FederationMeets: make(map[string][]*model.Meet),
 		LifterHistory:   make(map[string]*model.Lifter),
 		MeetResults:     make(map[string][]*model.LifterMeetResult),
 	}
 
+	var entryPaths, meetPaths []string
 	err := filepath.WalkDir(root, func(currPath string, d fs.DirEntry, err error) error {
-		// try to access path 
-		if err != nil {	
-			fmt.Printf("Error accessing path %q: %v\n", currPath, err)
+		if err != nil {
+			slog.Error("error accessing path", "path", currPath, "error", err)
 			return err
 		}
-
-		// get relative path (not full path)
-		arr := strings.Split(currPath, "/")
-		fileName := arr[len(arr)-1]
-
-		switch fileName {
-			case meetEntriesFileName:
-				err := handleEntriesFile(db, currPath)
-				if err != nil {
-					fmt.Println("Error handling entries file: ", err)
-				}
-				return nil
-			case meetInfoFileName:
-				err := handleMeetFile(db, currPath)
-				if err != nil {
-					fmt.Println("Error handling meet file: ", err)
-				}
-				return nil
-			default: 
-				return nil
+		switch filepath.Base(currPath) {
+		case meetEntriesFileName:
+			entryPaths = append(entryPaths, currPath)
+		case meetInfoFileName:
+			meetPaths = append(meetPaths, currPath)
 		}
+		return nil
 	})
-
 	if err != nil {
-		fmt.Printf("Error walking the directory: %v\n", err)
+		slog.Error("error walking the directory", "root", root, "error", err)
 	}
 
+	numWorkers := runtime.NumCPU()
+
+	// Parse meet files in parallel (I/O), merge serially (memory).
+	for _, pm := range parallelParse(meetPaths, numWorkers, parseMeetFileRaw) {
+		ensureFederationExists(db, pm.federation)
+		handleFederationMeetUpdate(db, pm.meet, pm.federation)
+	}
+
+	// Parse entries files in parallel (I/O), merge serially (memory).
+	for _, pe := range parallelParse(entryPaths, numWorkers, parseEntriesFileRaw) {
+		for _, r := range pe.results {
+			if r.Name == "" {
+				continue
+			}
+			ensureLifterExists(db, r.Name)
+			handleCompetitionResultsUpdate(db, r, r.Name)
+			handlePBUpdate(db, r, r.Name)
+			if pe.key != "" {
+				db.MeetResults[pe.key] = append(db.MeetResults[pe.key], r)
+			}
+		}
+	}
+
+	db.BuildIndexes()
 	return db, nil
+}
+
+// BuildIndexes computes the TopLifters and Records sorted slices from the loaded data.
+// It is called automatically by LoadDatabase and should also be called when constructing
+// a Database manually (e.g. in tests).
+func (db *Database) BuildIndexes() {
+	db.buildTopLifters()
+	db.buildRecords()
+}
+
+func (db *Database) buildTopLifters() {
+	db.TopLifters = db.TopLifters[:0]
+	for _, lifter := range db.LifterHistory {
+		for equip, pb := range lifter.PB {
+			if pb.Dots == 0 {
+				continue
+			}
+			var sex, wc string
+			for _, cr := range lifter.CompetitionResults {
+				if strings.EqualFold(cr.Equipment, equip) {
+					sex = cr.Sex
+					wc = cr.WeightClassKg
+					break
+				}
+			}
+			db.TopLifters = append(db.TopLifters, &PrecomputedTopEntry{
+				Name:          lifter.Name,
+				Equipment:     equip,
+				Sex:           sex,
+				WeightClassKg: wc,
+				PB:            pb,
+			})
+		}
+	}
+	sort.Slice(db.TopLifters, func(i, j int) bool {
+		return db.TopLifters[i].PB.Dots > db.TopLifters[j].PB.Dots
+	})
+}
+
+func (db *Database) buildRecords() {
+	type recordKey struct{ Sex, Equipment, WeightClass string }
+	records := make(map[recordKey]*model.Record)
+
+	for _, lifter := range db.LifterHistory {
+		for _, cr := range lifter.CompetitionResults {
+			if cr.Sex == "" || cr.Equipment == "" || cr.WeightClassKg == "" {
+				continue
+			}
+			rk := recordKey{cr.Sex, cr.Equipment, cr.WeightClassKg}
+			rec, exists := records[rk]
+			if !exists {
+				rec = &model.Record{WeightClassKg: cr.WeightClassKg, Sex: cr.Sex, Equipment: cr.Equipment}
+				records[rk] = rec
+			}
+			if cr.Squat != nil && cr.Squat.Best > 0 {
+				if rec.Squat == nil || cr.Squat.Best > rec.Squat.Lift {
+					rec.Squat = &model.RecordHolder{Lift: cr.Squat.Best, Lifter: cr.Name}
+				}
+			}
+			if cr.Bench != nil && cr.Bench.Best > 0 {
+				if rec.Bench == nil || cr.Bench.Best > rec.Bench.Lift {
+					rec.Bench = &model.RecordHolder{Lift: cr.Bench.Best, Lifter: cr.Name}
+				}
+			}
+			if cr.Deadlift != nil && cr.Deadlift.Best > 0 {
+				if rec.Deadlift == nil || cr.Deadlift.Best > rec.Deadlift.Lift {
+					rec.Deadlift = &model.RecordHolder{Lift: cr.Deadlift.Best, Lifter: cr.Name}
+				}
+			}
+			if cr.TotalKg > 0 {
+				if rec.Total == nil || cr.TotalKg > rec.Total.Lift {
+					rec.Total = &model.RecordHolder{Lift: cr.TotalKg, Lifter: cr.Name}
+				}
+			}
+		}
+	}
+
+	db.Records = make([]model.Record, 0, len(records))
+	for _, rec := range records {
+		db.Records = append(db.Records, *rec)
+	}
+	sort.Slice(db.Records, func(i, j int) bool {
+		if db.Records[i].Sex != db.Records[j].Sex {
+			return db.Records[i].Sex < db.Records[j].Sex
+		}
+		if db.Records[i].Equipment != db.Records[j].Equipment {
+			return db.Records[i].Equipment < db.Records[j].Equipment
+		}
+		return db.Records[i].WeightClassKg < db.Records[j].WeightClassKg
+	})
 }

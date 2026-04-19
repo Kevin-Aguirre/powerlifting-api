@@ -1,0 +1,21 @@
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+linters-settings:
+  errcheck:
+    # json.Encoder.Encode errors are intentionally ignored after headers are sent
+    exclude-functions:
+      - (encoding/json.Encoder).Encode
+
+issues:
+  exclude-rules:
+    # test files can use unsafe patterns
+    - path: "_test\\.go"
+      linters:
+        - errcheck

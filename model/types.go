@@ -27,24 +27,27 @@ type LiftAttempts struct {
 }
 
 type LifterMeetResult struct {
-	Place         string        `json:"place,omitempty"`
-	Name          string        `json:"name"`
-	BirthDate     string        `json:"birthDate,omitempty"`
-	Sex           string        `json:"sex,omitempty"`
-	BirthYear     int           `json:"birthYear,omitempty"`
-	Age           float64       `json:"age,omitempty"`
-	Country       string        `json:"country,omitempty"`
-	State         string        `json:"state,omitempty"`
-	Equipment     string        `json:"equipment,omitempty"`
-	Division      string        `json:"division,omitempty"`
-	BodyweightKg  float64       `json:"bodyweightKg,omitempty"`
-	WeightClassKg string        `json:"weightClassKg,omitempty"`
-	Squat         *LiftAttempts `json:"squat,omitempty"`
-	Bench         *LiftAttempts `json:"bench,omitempty"`
-	Deadlift      *LiftAttempts `json:"deadlift,omitempty"`
-	TotalKg       float64       `json:"totalKg,omitempty"`
-	Event         string        `json:"event,omitempty"`
-	Tested        string        `json:"tested,omitempty"`
+	Place          string        `json:"place,omitempty"`
+	Name           string        `json:"name"`
+	BirthDate      string        `json:"birthDate,omitempty"`
+	Sex            string        `json:"sex,omitempty"`
+	BirthYear      int           `json:"birthYear,omitempty"`
+	Age            float64       `json:"age,omitempty"`
+	Country        string        `json:"country,omitempty"`
+	State          string        `json:"state,omitempty"`
+	Equipment      string        `json:"equipment,omitempty"`
+	Division       string        `json:"division,omitempty"`
+	BodyweightKg   float64       `json:"bodyweightKg,omitempty"`
+	WeightClassKg  string        `json:"weightClassKg,omitempty"`
+	Squat          *LiftAttempts `json:"squat,omitempty"`
+	Bench          *LiftAttempts `json:"bench,omitempty"`
+	Deadlift       *LiftAttempts `json:"deadlift,omitempty"`
+	TotalKg        float64       `json:"totalKg,omitempty"`
+	Event          string        `json:"event,omitempty"`
+	Tested         string        `json:"tested,omitempty"`
+	MeetDate       string        `json:"meetDate,omitempty"`
+	MeetFederation string        `json:"meetFederation,omitempty"`
+	MeetName       string        `json:"meetName,omitempty"`
 }
 
 type Lifter struct {
@@ -66,4 +69,22 @@ type Record struct {
 	Bench         *RecordHolder `json:"bench,omitempty"`
 	Deadlift      *RecordHolder `json:"deadlift,omitempty"`
 	Total         *RecordHolder `json:"total,omitempty"`
+}
+
+type PREntry struct {
+	Date     string  `json:"date,omitempty"`
+	Squat    float64 `json:"squat,omitempty"`
+	Bench    float64 `json:"bench,omitempty"`
+	Deadlift float64 `json:"deadlift,omitempty"`
+	Total    float64 `json:"total,omitempty"`
+	Dots     float64 `json:"dots,omitempty"`
+}
+
+type CareerStats struct {
+	Name              string               `json:"name"`
+	TotalCompetitions int                  `json:"totalCompetitions"`
+	FirstCompetition  string               `json:"firstCompetition,omitempty"`
+	LastCompetition   string               `json:"lastCompetition,omitempty"`
+	Federations       []string             `json:"federations,omitempty"`
+	PRProgression     map[string][]PREntry `json:"prProgression,omitempty"`
 }
